@@ -2,6 +2,14 @@
 
 Welcome to the IdeaFlye development team! This guide will walk you through setting up your development environment and getting started with our codebase.
 
+## Getting Started
+
+1. Clone this repository:
+   ```bash
+   git clone git@github.com:IdeaFlye/ideaflye-onboarding.git
+   cd ideaflye-onboarding
+   ```
+
 ## Prerequisites
 
 Before you begin, ensure you have the following installed on your system:
