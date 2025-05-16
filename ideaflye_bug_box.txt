@@ -1,0 +1,9 @@
+Key configurations for server health and routing, critical for resolving past 502 errors:
+- The `ideaflye-server-service` (Kubernetes Service for the server, type: LoadBalancer) uses a **named port** `http-main` (port: 80, targetPort: 80). This naming is crucial.
+- The `ideaflye-server` application (in the Node.js pod) exposes its health check endpoint at path `/health` on its listening port `80`.
+- A `BackendConfig` resource (`ideaflye-server-backend-config`) is associated with `ideaflye-server-service`. Its `healthCheck` specification defines:
+    - `requestPath: /health`
+    - `type: HTTP`
+    - (The `port` field is intentionally omitted, allowing GKE to default to the service's named port for the health check logic, ensuring the check targets port 80 on the pod via the NodePort).
+- The GCE Ingress (`ideaflye-ingress`) manages the external load balancer. This load balancer performs health checks against the **NodePort** of the `ideaflye-server-service`. For a check to pass, the NodePort must successfully route to the pod's port `80`, and the `/health` path must return a 200 OK.
+- Previously, conflicting Ingress resources and incorrect health check port configurations in `BackendConfig` (or how it translated to the Google Cloud Health Check resource) led to the load balancer deeming backends unhealthy.

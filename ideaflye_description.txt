@@ -1,0 +1,98 @@
+ideaflye is composed of a client, server, neo4j, and postgres kubernetes pods hosted in google cloud console.
+Each of client, server, neo4j (which includes postgres code) have repos in Github. Pushed changes trigger cloud build in google
+There is an ingress set up in google cloud (ideaflye-ingress), which in cloudflare both the server and client are linked to through their A-records in DNS w/ content ip 34.8.70.39
+In cloudflare, the client is proxying, and the server is dns-only
+We have a google managed ssl certification
+Environment variables/secrets are in the google cloud console configmap and secrets section under various names including: ideaflye-client-secrets, ideaflye-server-secrets, gcs-key
+Pushing changes to Github triggers cloudbuild.
+
+Site architecture mermaid diagram:
+graph TB
+    subgraph "Client Side"
+        Browser["Browser React"]
+        subgraph "Client App"
+            ApolloClient["Apollo Client\nREACT_APP_GRAPHQL_URI=\nhttps://server.ideaflye.com/graphql"]
+            ReactComponents["React Components"]
+        end
+        CloudflareAccess["Cloudflare Access\nDomain: ideaflye.com"]
+    end
+
+    subgraph "Google Cloud Platform"
+        subgraph "GKE Cluster"
+            K8sService["K8s Service (server)\nType: LoadBalancer\nport:http-main 80=>target:80\nNodePort auto-assigned"]
+            BackendCfg["BackendConfig (server)\nhealthCheck: /health\n(uses service port http-main)"]
+            ConfigMapsSecrets["ConfigMaps & Secrets\n(e.g., ideaflye-client-secrets, ideaflye-server-secrets, gcs-key)"]
+
+            subgraph "Ingress Layer"
+                Ingress["Google Managed SSL + GCE Ingress\nIP: 34.8.70.39"]
+            end
+
+            subgraph "Client Pod"
+                ReactApp["React App Container\nREACT_APP_GRAPHQL_URI"]
+            end
+
+            subgraph "Server Pod"
+                NodeApp["Node.js App Container\nserver.ideaflye.com\nApp Port: 80"]
+                AppHealth["App Health Endpoint\n/health on port 80"]
+                GraphQLServer["GraphQL Server"]
+                Resolvers["GraphQL Resolvers"]
+                NodeApp --> AppHealth
+            end
+
+            subgraph "Database Layer"
+                Neo4j["Neo4j Pod\nNEO4J_URI\nNEO4J_USERNAME\nNEO4J_PASSWORD"]
+                Postgres["PostgreSQL Pod\nPOSTGRES_URI\nPOSTGRES_USER\nPOSTGRES_PASSWORD"]
+            end
+        end
+
+        CloudBuild["Cloud Build\nREACT_APP_GRAPHQL_URI"]
+        CloudStorage["Cloud Storage\nGCP_STORAGE_BUCKET"]
+        CloudFunctions["Cloud Functions\nEMAIL_SERVICE_URL"]
+    end
+
+    subgraph "External Services"
+        OpenAI["OpenAI API\nOPENAI_API_KEY"]
+        Stripe["Stripe API\nSTRIPE_SECRET_KEY\nSTRIPE_PUBLISHABLE_KEY\nSTRIPE_WEBHOOK_SECRET"]
+        GoogleOAuth["Google OAuth\nGOOGLE_CLIENT_ID\nGOOGLE_CLIENT_SECRET"]
+    end
+
+    ReactComponents -->|"GraphQL Queries/Mutations"| ApolloClient
+    ApolloClient -->|"HTTPS"| CloudflareAccess
+    Browser -->|"HTTPS"| CloudflareAccess
+    CloudflareAccess -->|"Auth"| Ingress
+
+    Ingress -->|"Routes to"| K8sService
+    K8sService -->|"Selects Pods"| NodeApp
+    Ingress -->|"Uses Config"| BackendCfg
+    BackendCfg -.->|"Defines HC for"| K8sService
+    Ingress -.->|"LB Health Check (via NodePort to /health on App Port 80)"| AppHealth
+
+    ConfigMapsSecrets -.->|envFrom/volumeMounts| ReactApp
+    ConfigMapsSecrets -.->|envFrom/volumeMounts| NodeApp
+
+    GraphQLServer -->|"Execute"| Resolvers
+    Resolvers -->|"Query/Mutate"| Neo4j
+    Resolvers -->|"Query/Mutate"| Postgres
+
+    Resolvers -->|"HTTPS"| OpenAI
+    Resolvers -->|"HTTPS"| Stripe
+    Resolvers -->|"HTTPS"| GoogleOAuth
+    Resolvers -->|"HTTPS"| CloudStorage
+    Resolvers -->|"HTTPS"| CloudFunctions
+
+    CloudBuild -->|"Deploy"| ReactApp
+    CloudBuild -->|"Deploy"| NodeApp
+
+    classDef external fill:#f9f,stroke:#333,stroke-width:2px
+    classDef database fill:#69b,stroke:#333,stroke-width:2px
+    classDef service fill:#9b6,stroke:#333,stroke-width:2px
+    classDef security fill:#f96,stroke:#333,stroke-width:2px
+    classDef client fill:#bfb,stroke:#333,stroke-width:2px
+    classDef k8sconfig fill:#ddd,stroke:#333,stroke-width:2px
+
+    class OpenAI,Stripe,GoogleOAuth external
+    class Neo4j,Postgres database
+    class NodeApp,ReactApp,GraphQLServer service
+    class CloudflareAccess,Ingress security
+    class ApolloClient,ReactComponents client
+    class K8sService,BackendCfg,ConfigMapsSecrets k8sconfig
