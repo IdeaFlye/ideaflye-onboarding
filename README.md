@@ -116,6 +116,195 @@ The script will clone the following repositories:
 - ideaflye-neo4j: Database configuration and scripts
 - ideaflye-ai: AI/ML components
 
+## Local Development Environment Setup
+
+This section guides you through setting up the IdeaFlye client and server applications to run locally on your machine for development. When running locally, the client and server will still connect to the production databases (Neo4j and PostgreSQL) hosted in the cloud.
+
+### 1. Install Node.js and npm (via nvm)
+
+We recommend using Node Version Manager (`nvm`) to install and manage Node.js versions.
+
+a.  **Install nvm:**
+    Open your terminal and run:
+    ```bash
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    ```
+    After the script finishes, close and reopen your terminal, or run the commands suggested by the nvm installer to load nvm into your current session (usually `source ~/.zshrc`, `source ~/.bashrc`, or similar depending on your shell).
+
+b.  **Install Node.js (LTS version):**
+    Once nvm is installed and loaded, install the latest Long-Term Support (LTS) version of Node.js:
+    ```bash
+    nvm install --lts
+    ```
+
+c.  **Set the LTS version as default:**
+    To ensure this version is used automatically in new terminal sessions:
+    ```bash
+    nvm use --lts
+    nvm alias default lts 
+    ```
+    Verify the installation by opening a new terminal and typing:
+    ```bash
+    node -v
+    npm -v
+    ```
+    You should see version numbers outputted for both. If you encounter `command not found`, ensure nvm's initialization script is correctly added to your shell's startup file (e.g., `~/.zshrc`, `~/.bash_profile`). The nvm installation usually handles this, but you may need to ensure lines like `export NVM_DIR="$HOME/.nvm"` and `[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"` are present and sourced.
+
+### 2. Configure Local Development Environment
+
+To set up your local development environment with the correct configuration (secrets, database connections, etc.), we provide a script that fetches configuration from the GCP Kubernetes cluster:
+
+a. **Run the setup script:**
+   ```bash
+   # From the onboarding directory
+   ./setup_local_env.sh
+   ```
+
+   This script will:
+   - Check for required tools (gcloud, kubectl, jq)
+   - Guide you through authentication with Google Cloud if needed
+   - Help you select the correct GKE cluster
+   - Fetch the configuration from Kubernetes ConfigMaps and Secrets
+   - Create local `.env` files for both client and server
+   - Create the `gcs-key.json` file needed for Google Cloud Storage access
+
+b. **Prerequisites for the script:**
+   - Google Cloud SDK (gcloud) installed
+   - kubectl command-line tool
+   - jq command-line JSON processor
+   - Access to the IdeaFlye GCP project
+   
+   Don't worry if you don't have all these tools - the script will help you install missing dependencies.
+
+### 3. Install Project Dependencies
+
+For both the `ideaflye-client` and `ideaflye-server`, you'll need to install their specific Node.js package dependencies.
+
+a.  **For the Client (`ideaflye-client`):**
+    Navigate to the client directory and install dependencies:
+    ```bash
+    cd IdeaFlye/ideaflye-client 
+    npm install --legacy-peer-deps
+    ```
+
+b.  **For the Server (`ideaflye-server`):**
+    Navigate to the server directory and install dependencies:
+    ```bash
+    cd IdeaFlye/ideaflye-server
+    npm install --legacy-peer-deps
+    ```
+    *Note: The `--legacy-peer-deps` flag is used to resolve potential peer dependency conflicts that might arise with the project's current package versions.*
+
+### 4. Docker Setup for Apple Silicon Macs (Recommended)
+
+If you're using a Mac with Apple Silicon (M1, M2, etc.), we recommend running the server in Docker to avoid compatibility issues with native Node.js modules like TensorFlow and bcrypt.
+
+a.  **Install Docker Desktop:**
+    Download and install Docker Desktop from [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
+
+b.  **Build the Docker image:**
+    This is done automatically by the `setup_local_env.sh` script. If you need to manually build it:
+    ```bash
+    cd IdeaFlye/ideaflye-server
+    docker build -t ideaflye-server .
+    ```
+
+c.  **Run the server in Docker:**
+    ```bash
+    cd IdeaFlye/ideaflye-server
+    docker run -p 4000:80 -v $(pwd)/.env:/usr/src/app/.env -v $(pwd)/gcs-key.json:/usr/src/app/gcs-key.json -e GOOGLE_APPLICATION_CREDENTIALS=/usr/src/app/gcs-key.json ideaflye-server
+    ```
+
+    This command:
+    - Maps port 4000 on your host to port 80 in the container
+    - Mounts your local `.env` file into the container
+    - Mounts your local `gcs-key.json` file into the container
+    - Sets the GOOGLE_APPLICATION_CREDENTIALS environment variable
+    - Uses the `ideaflye-server` image created earlier
+
+    The server will be accessible at `http://localhost:4000/graphql`
+
+### 5. Running the Applications Locally
+
+Once dependencies are installed, you can start the development servers.
+
+a.  **To start the Client (`ideaflye-client`):**
+
+    **Option 1: Using Docker with the startup script (recommended):**
+    ```bash
+    # From the onboarding directory
+    ./start-client.sh
+    ```
+    This script will:
+    - Check if Docker is installed and running
+    - Verify the client configuration files exist
+    - Create a development-specific Dockerfile if needed
+    - Build the Docker image with the latest code
+    - Handle port conflicts automatically
+    - Start the client with all required environment variables
+    - Mount source files for live reload during development
+
+    **Option 2: Using Node.js directly:**
+    ```bash
+    cd IdeaFlye/ideaflye-client
+    npm start
+    ```
+    This usually opens the client application in your default web browser.
+
+b.  **To start the Server (`ideaflye-server`):**
+    
+    **Option 1: Using Docker with the startup script (recommended for Apple Silicon Macs):**
+    ```bash
+    # From the onboarding directory
+    ./start-server.sh
+    ```
+    This script will:
+    - Check if Docker is installed and running
+    - Verify the server configuration files exist
+    - Build the Docker image if needed
+    - Handle port conflicts automatically
+    - Start the server with all required parameters
+
+    **Option 2: Using Docker manually:**
+    ```bash
+    cd IdeaFlye/ideaflye-server
+    docker run -p 4000:80 -v $(pwd)/.env:/usr/src/app/.env -v $(pwd)/gcs-key.json:/usr/src/app/gcs-key.json -e GOOGLE_APPLICATION_CREDENTIALS=/usr/src/app/gcs-key.json ideaflye-server
+    ```
+
+    **Option 3: Using Node.js directly:**
+    ```bash
+    cd IdeaFlye/ideaflye-server
+    npm start
+    ```
+
+### 6. Running the Full Stack in Docker
+
+For the best development experience, especially on Apple Silicon Macs, we recommend running both the client and server in Docker:
+
+1. **Start the server first:**
+   ```bash
+   # From the onboarding directory
+   ./start-server.sh
+   ```
+
+2. **Start the client in a new terminal:**
+   ```bash
+   # From the onboarding directory
+   ./start-client.sh
+   ```
+
+3. **Access the application:**
+   - Frontend UI: http://localhost:3000
+   - GraphQL API: http://localhost:4000/graphql
+
+Running in Docker provides these benefits:
+- Consistent development environment across all platforms
+- Avoids architecture compatibility issues (especially on Apple Silicon)
+- Mirrors the production deployment more closely
+- Handles all necessary environment variables and file mounts
+
+With both client and server running locally, you can develop and test your changes. Remember that changes pushed to the `master` branch will trigger the production cloud build.
+
 ## Project Structure
 The IdeaFlye project is organized into multiple repositories, each serving a specific purpose:
 
@@ -134,7 +323,51 @@ Each repository contains its own README with specific setup instructions and req
 4. Ensure all tests pass before requesting review
 
 ## Common Issues and Solutions
-(This section will be populated as we encounter and solve issues during development)
+
+### TensorFlow and bcrypt Native Module Issues on Apple Silicon
+**Problem:** On Apple Silicon Macs (M1/M2), you may encounter errors with native Node.js modules, particularly TensorFlow and bcrypt.
+**Solution:** Use Docker as described in section 4 to run the server in a container with compatible binary modules.
+
+### PostgreSQL Connection Errors
+**Problem:** `Error connecting to PostgreSQL: Error: connect ECONNREFUSED [IP address]:5432`
+**Solution:** This usually occurs when the PostgreSQL IP address has changed in Kubernetes. Run the `setup_local_env.sh` script again to fetch the latest configuration, or manually update the `POSTGRES_HOST` value in the server's `.env` file.
+
+### Docker Port Already in Use
+**Problem:** `Error response from daemon: failed to set up container networking: driver failed programming external connectivity: Bind for 0.0.0.0:4000 failed: port is already allocated`
+**Solution:** Stop the currently running Docker container:
+```bash
+docker stop $(docker ps -q)
+```
+Then run your Docker container again.
+
+### CORS Configuration Issues
+**Problem:** `Origin http://localhost:3000 is not allowed by Access-Control-Allow-Origin.`
+**Solution:** Ensure the server's .env file has the correct CORS_ORIGIN setting for local development:
+```
+CORS_ORIGIN="http://localhost:3000"
+```
+Be careful with duplicate CORS_ORIGIN entries in the .env file - the last one will override previous ones.
+
+### HTTPS vs HTTP in Development
+**Problem:** SSL errors when trying to connect to the local server: `An SSL error has occurred and a secure connection to the server cannot be made.`
+**Solution:** The client's Apollo configuration should use HTTP for local development but HTTPS in production. This should be handled automatically, but if you encounter SSL errors, check `src/apolloClient.js` to ensure it detects localhost/development environments correctly.
+
+### TensorFlow and Native Module Issues
+**Problem:** Errors loading modules like TensorFlow or immutable: `Module not found: Error: Can't resolve '@tensorflow/tfjs-core'`
+**Solution:** The Docker setup should handle this automatically. If you encounter these errors, try rebuilding the Docker image:
+```bash
+docker stop ideaflye-client
+docker rm ideaflye-client
+docker rmi ideaflye-client
+cd /onboarding && ./start-client.sh
+```
+
+### Google Cloud Storage Authentication
+**Problem:** `Error making bucket public: Could not load the default credentials`
+**Solution:** Ensure the `GOOGLE_APPLICATION_CREDENTIALS` environment variable is set correctly when running Docker:
+```bash
+docker run -p 4000:80 -v $(pwd)/.env:/usr/src/app/.env -v $(pwd)/gcs-key.json:/usr/src/app/gcs-key.json -e GOOGLE_APPLICATION_CREDENTIALS=/usr/src/app/gcs-key.json ideaflye-server
+```
 
 ## Need Help?
 - For technical issues: [Contact information will be added]
