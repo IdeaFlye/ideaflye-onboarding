@@ -18,8 +18,8 @@ NC='\033[0m' # No Color
 
 # Ensure directories exist
 BASE_DIR="/Users/et/Desktop/IdeaFlye" # Base directory for the project
-SERVER_DIR="$BASE_DIR/IdeaFlye/ideaflye-server"
-CLIENT_DIR="$BASE_DIR/IdeaFlye/ideaflye-client"
+SERVER_DIR="$BASE_DIR/ideaflye-server"
+CLIENT_DIR="$BASE_DIR/ideaflye-client"
 SERVER_ENV_FILE="$SERVER_DIR/.env"
 CLIENT_ENV_FILE="$CLIENT_DIR/.env"
 GCS_KEY_FILE="$SERVER_DIR/gcs-key.json"

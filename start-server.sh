@@ -7,7 +7,7 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-SERVER_DIR="/Users/et/Desktop/IdeaFlye/IdeaFlye/ideaflye-server"
+SERVER_DIR="/Users/et/Desktop/IdeaFlye/ideaflye-server"
 
 echo -e "${BLUE}IdeaFlye Server Starter${NC}"
 echo "This script will start the IdeaFlye server using Docker."
