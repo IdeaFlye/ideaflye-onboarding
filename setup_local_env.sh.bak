@@ -462,26 +462,28 @@ if kubectl get secret $GCS_KEY_SECRET &>/dev/null; then
 else
     echo -e "${YELLOW}Warning: Could not find $GCS_KEY_SECRET Secret.${NC}"
     
-    # Offer to create from the previously supplied content
-    if confirm "Would you like to create the gcs-key.json file from previously supplied content?"; then
-        cat > "$GCS_KEY_FILE" << 'EOL'
-{
-  "type": "service_account",
-  "project_id": "vm-server-setup-1",
-  "private_key_id": "8b5c20db8c4c7789ed1c24250beede7b24227740",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEuwIBADANBgkqhkiG9w0BAQEFAASCBKUwggShAgEAAoIBAQDOZNqziLvKKoHa\ncWA6tLwNfr+1KwHjHas2vXoEcjIpnCKdhKAXzcdtT1kDmgJ+yMj7MiQyIpbKdeCM\nr0oUjxRt6wO596fpU4IhOyC66cLjwnPNVAXrXu3PwEiUWwyDTXa5v+suL9KYiCFA\nXgn598B2Qnrrm0HGmZWbTKQnMfWBFZK9HEyrkRYLF0abvTSW8Bxew65WnhHGD/mH\nYE3sCZGAKN52nG73rljgE235lvKnXcpU3f6/Ks7bIyTcp2KSJGvMnJxG+32vau0+\nhA7j01ig/V8EkDYR5/v+Sf7RaHqbz1yIKNpnDx2RKuRc7IQC0IIn3Ct16KvxArVO\nHd3ovuVhAgMBAAECggEACQ5EyEbSEoM98lMyKTE/5QmwKKdL7GajWgIDRgmqqMe4\nfxfQHGtDekjWe4F45Y4yv07KZsa8vgJhCVsxkWhbuZzrq2+x1tt6pLGe9ISIMA0a\nqI2pkaigZCKvrOl/2bZNDo2++5OO7IRX20g2+5ia+3rzcWgo7GeblN1CmE3R+QR\nwYRtMOiYG3aHSlXAFl9gdLQLP1XEYBRZhzdKmZFfF+1ycyn0vsvtrMf86BW4Nz1I\nfRCT+ZNwpRSkHDbjzWLhQUsmJC+1S67yDp6ToD+jCwtqV5r68Z8Z3AAy3z9FNBh9\nGV20XUZmgQ5iRwwf+D1EHluPd6mJZo2c5gX/3ZYAjwKBgQDoapWIyTl8I2O6bBn2\niYqBmgpodnszsna1vRXe+JDEsQcNHApJDqqQC/BFZrj0PbOy7h7i8Hmxq9ReVAGS\nDESZnIGH3Myz62k9ZDtG/lugBvqeI49MybCUNGqKR6JqYkpl/3PwkB+JLb9npfOV\nWEejcyw7FMOJdGXhJLualmdn3wKBgQDjVks7PajWe8mPOaZSHgD5Q7jgcFw6MI6p\nL+6pdHnaoFgiwpBgKBNd7pBsc3k7Wycny8mQ3ZEthQQnL8DVQui2FYoae7wTwe/+\nUzeINl7mnOhpRgWJTQUbNyZJzz9S6yhbSDkwQzb/8CN6c11D7Cv7XJ9lNXn5CUaQ\nny1NG2xavwJ/Up2Qig79YCM0UBAdKoW5tlgLWxbCtJ27lN6h56Bz1XcYCpDtFwsf\nlhSoVAMvu6IzPmdmk0Tn/UAXPXCfHks+F1yKrsDOAyarQide6t1/tGLGs2/wgFsx\naX04Ye8UzLwjth4YGGsiyqB4aV+UNoIq9O77ygSXfUTi8iUcitbr6wKBgQDQfaux\nQPM/AXfw6qYmWW37LKi47VMn6rBraZIvxqqaXsN13YobJaXdV5UMYTqlvQtD7BmH\nyiwC2yLb7WekLiDOHSLy9teeJxa64Abl3TdbuDtNkPIy4Xf1Zbavqmog2ZnBXZNV\nN8+RGeLvwi2exVHwzRlB8LFUO7WDnPgm5yeQcQKBgB4EbGyqsTshXrECVBMJ1Oab\n0W8UPF5YEqtzaWMDi8FdapQddsBaOxVsARdlPC671hCAQUNG2GA+FP/6Sj7TnQ/R\nQ2gnxe5AfdLJ4KHegTFu5+Bj4ORWPYwyUv/6VH6DEzmmSbqCYkHipUhjIBvn8sMw\nf5UEUMgHi6k2VLcxeIRJ\n-----END PRIVATE KEY-----\n",
-  "client_email": "ideaflye-storage@vm-server-setup-1.iam.gserviceaccount.com",
-  "client_id": "113008230697386303665",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ideaflye-storage%40vm-server-setup-1.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
-EOL
-        echo -e "${GREEN}✓ GCS key file created at $GCS_KEY_FILE from provided content${NC}"
+    # Check for local credentials file
+    CREDENTIALS_FILE="$BASE_DIR/gcs-credentials.json"
+    GCP_CREDENTIALS_FILE="$BASE_DIR/gcp-service-account.json"
+    
+    if [ -f "$CREDENTIALS_FILE" ]; then
+        echo "Found local credentials file at $CREDENTIALS_FILE"
+        cp "$CREDENTIALS_FILE" "$GCS_KEY_FILE"
+        echo -e "${GREEN}✓ GCS key file copied from local credentials file${NC}"
+    elif [ -f "$GCP_CREDENTIALS_FILE" ]; then
+        echo "Found local credentials file at $GCP_CREDENTIALS_FILE"
+        cp "$GCP_CREDENTIALS_FILE" "$GCS_KEY_FILE"
+        echo -e "${GREEN}✓ GCS key file copied from local GCP credentials file${NC}"
+    elif [ -f "$SERVER_DIR/gcs-credentials.json" ]; then
+        echo "Found credentials file in server directory"
+        cp "$SERVER_DIR/gcs-credentials.json" "$GCS_KEY_FILE"
+        echo -e "${GREEN}✓ GCS key file copied from server directory${NC}"
     else
-        echo -e "${YELLOW}GCS key file not created. Server may not be able to access Google Cloud Storage.${NC}"
+        echo -e "${RED}Local credentials file not found${NC}"
+        echo -e "${YELLOW}Please obtain the GCP credentials file from your team administrator${NC}"
+        echo -e "${YELLOW}and save it as $CREDENTIALS_FILE or $GCP_CREDENTIALS_FILE${NC}"
+        echo -e "${YELLOW}Then run this setup script again.${NC}"
+        echo -e "${RED}Server will not be able to access Google Cloud Storage without this file.${NC}"
     fi
 fi
 

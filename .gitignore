@@ -22,3 +22,7 @@ yarn-error.log*
 
 # Log files
 *.log 
+
+# Credentials
+/gcs-credentials.json
+/gcp-service-account.json 
