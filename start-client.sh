@@ -25,6 +25,28 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
+# Check if container with the name 'ideaflye-client' already exists
+if docker ps -a --format '{{.Names}}' | grep -q "^ideaflye-client$"; then
+    # Check if it's running
+    if docker ps --format '{{.Names}}' | grep -q "^ideaflye-client$"; then
+        echo -e "${YELLOW}A container named 'ideaflye-client' is already running.${NC}"
+        echo -e "Would you like to stop it and start a new one? [y/N]"
+    else
+        echo -e "${YELLOW}A container named 'ideaflye-client' exists but is not running.${NC}"
+        echo -e "Would you like to remove it and start a new one? [y/N]"
+    fi
+    
+    read -r response
+    if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+        echo -e "${YELLOW}Stopping and removing existing container...${NC}"
+        docker stop ideaflye-client 2>/dev/null || true
+        docker rm ideaflye-client 2>/dev/null || true
+    else
+        echo -e "${YELLOW}Keeping existing container. Exiting script.${NC}"
+        exit 0
+    fi
+fi
+
 # Navigate to client directory
 cd "$CLIENT_DIR" || {
     echo -e "${RED}Error: Cannot find client directory at $CLIENT_DIR${NC}"
