@@ -1,0 +1,319 @@
+IdeaFlye Authentication & Token System Documentation
+=====================================================
+
+OVERVIEW
+--------
+IdeaFlye uses a dual-token authentication system with HTTP-only cookies for enhanced security:
+- Access Tokens: Short-lived (15 minutes), stored in localStorage, sent in Authorization headers
+- Refresh Tokens: Long-lived (7 days), stored in HTTP-only cookies, used for token renewal
+- This hybrid approach balances security (HTTP-only cookies protect from XSS) with functionality (localStorage enables client-side logic)
+
+TOKEN ARCHITECTURE
+------------------
+
+1. ACCESS TOKENS
+   - Lifetime: 15 minutes
+   - Storage: localStorage (client-side)
+   - Transport: Authorization Bearer header
+   - Contains: userId, username, email, membershipTier, verificationStatus
+   - Purpose: Authenticate API requests
+
+2. REFRESH TOKENS
+   - Lifetime: 7 days
+   - Storage: HTTP-only cookies (server-managed)
+   - Transport: Automatic cookie inclusion with credentials: 'include'
+   - Contains: userId, username, tokenVersion (for rotation)
+   - Purpose: Generate new access tokens without re-login
+
+3. SECURITY FEATURES
+   - HTTP-only cookies prevent XSS access to refresh tokens
+   - Secure flag in production (HTTPS only)
+   - SameSite: 'lax' for cross-site protection
+   - Domain-specific cookies (localhost for dev, ideaflye.com for prod)
+   - Token rotation on refresh (new refresh token generated)
+
+AUTHENTICATION FLOW
+-------------------
+
+LOGIN/REGISTER PROCESS:
+1. User submits credentials via GraphQL mutation (login/register)
+2. Server validates credentials against Neo4j database
+3. Server generates both access and refresh tokens using JWT
+4. Server sets refresh token in HTTP-only cookie
+5. Server returns access token + user data in response
+6. Client stores access token in localStorage
+7. Client updates React state (isLoggedIn: true, user data)
+
+TOKEN REFRESH PROCESS:
+1. Access token expires (15 minutes) or becomes invalid
+2. Apollo Client error handling detects auth error (401/Unauthorized)
+3. Client automatically calls refreshToken mutation with credentials: 'include'
+4. Server reads refresh token from HTTP-only cookie
+5. Server validates refresh token and fetches user from Neo4j
+6. Server generates new access token + new refresh token
+7. Server sets new refresh token in HTTP-only cookie
+8. Server returns new access token + user data
+9. Client stores new access token in localStorage
+10. Client retries original failed request with new token
+
+LOGOUT PROCESS:
+1. Client calls logout function
+2. Client clears localStorage (access token, refresh token, user data)
+3. Client sets 'isLoggedOut' flag to prevent auto-refresh
+4. Client clears Apollo cache to remove cached data
+5. Server clearCookie() removes refresh token cookie
+6. Client redirects to home page
+
+CLIENT-SIDE COMPONENTS
+----------------------
+
+1. AUTHCONTEXT (AuthContext.js)
+   - Manages global authentication state
+   - Handles login, register, logout, and refresh operations
+   - Provides user data and auth status to all components
+   - Uses Apollo mutations with credentials: 'include' for cookie support
+
+   Key Functions:
+   - login(username, password): Authenticates and sets tokens
+   - register(username, email, password, inviteCode): Creates account
+   - logout(): Clears all auth data and cookies
+   - checkAuth(): Handles initial auth state and refresh on app load
+
+2. APOLLO CLIENT (apolloClient.js)
+   - Configures GraphQL client with authentication
+   - Adds Authorization headers with access tokens
+   - Implements automatic token refresh on auth errors
+   - Uses credentials: 'include' for cookie-based refresh tokens
+
+   Key Features:
+   - Error link: Detects auth errors and triggers refresh
+   - Auth link: Adds access token to request headers
+   - Refresh function: Handles token renewal via cookies
+   - Retry logic: Automatically retries failed requests after refresh
+
+3. QUERY BEHAVIOR
+   - GET_CURRENT_USER: Fetches user data on app load if access token exists
+   - Skip condition: Doesn't run if no access token or explicitly logged out
+   - Error handling: Lets Apollo Client handle auth errors rather than immediately clearing state
+
+SERVER-SIDE COMPONENTS
+----------------------
+
+1. GRAPHQL MUTATIONS
+   Location: ideaflye-server/src/schema/resolvers/user/mutations.js
+
+   login(username, password):
+   - Validates credentials against Neo4j
+   - Generates access + refresh tokens
+   - Sets refresh token in HTTP-only cookie
+   - Returns access token + user data
+
+   register(username, email, password, inviteCode):
+   - Creates new user in Neo4j
+   - Generates access + refresh tokens
+   - Sets refresh token in HTTP-only cookie
+   - Returns access token + user data
+
+   refreshToken():
+   - Reads refresh token from HTTP-only cookie
+   - Validates token and fetches user from Neo4j
+   - Generates new access + refresh tokens
+   - Sets new refresh token in HTTP-only cookie
+   - Returns new access token + user data
+
+2. JWT CONFIGURATION
+   Location: ideaflye-server/src/config/jwt.js
+   - JWT_SECRET: Environment variable for token signing
+   - Access token expiry: 15 minutes
+   - Refresh token expiry: 7 days
+   - Token payload includes user metadata
+
+3. COOKIE CONFIGURATION
+   - httpOnly: true (prevents JavaScript access)
+   - secure: false (localhost), true (production)
+   - sameSite: 'lax' (CSRF protection)
+   - domain: 'localhost' (dev), process.env.COOKIE_DOMAIN (prod)
+   - maxAge: 7 days
+   - path: '/' (site-wide access)
+
+PAGE REFRESH BEHAVIOR
+---------------------
+
+PREVIOUS ISSUE (FIXED):
+- Race condition between AuthContext.checkAuth() and GET_CURRENT_USER query
+- Both tried to refresh tokens simultaneously
+- Conflicts caused authentication to fail and user logout
+
+CURRENT SOLUTION:
+1. On page refresh, checkAuth() runs first
+2. If access token exists, checkAuth() lets GET_CURRENT_USER handle auth
+3. GET_CURRENT_USER query triggers with access token
+4. If token expired, Apollo Client error handling automatically refreshes
+5. Successful refresh maintains user session
+6. Failed refresh properly logs out user
+
+This eliminates race conditions and ensures smooth page refresh experience.
+
+SECURITY CONSIDERATIONS
+-----------------------
+
+1. XSS PROTECTION
+   - Refresh tokens in HTTP-only cookies cannot be accessed by JavaScript
+   - Access tokens in localStorage are still vulnerable but short-lived (15 min)
+   - Regular token rotation limits exposure window
+
+2. CSRF PROTECTION
+   - SameSite cookie attribute prevents cross-site request forgery
+   - credentials: 'include' required for legitimate requests
+
+3. TOKEN ROTATION
+   - New refresh token generated on each refresh
+   - Invalidates previous refresh tokens
+   - Limits replay attack windows
+
+4. DOMAIN RESTRICTION
+   - Cookies restricted to specific domains
+   - Prevents token theft across different sites
+
+DEVELOPMENT VS PRODUCTION
+-------------------------
+
+DEVELOPMENT (localhost):
+- HTTP connections allowed
+- Domain: 'localhost'
+- Secure: false
+- Relaxed CORS settings
+
+PRODUCTION (ideaflye.com):
+- HTTPS enforced
+- Domain: process.env.COOKIE_DOMAIN
+- Secure: true
+- Strict CORS settings
+
+ENVIRONMENT VARIABLES
+---------------------
+
+Server (.env):
+- JWT_SECRET: Secret key for token signing
+- NODE_ENV: 'development' or 'production'
+- COOKIE_DOMAIN: Domain for production cookies
+
+Client (.env):
+- REACT_APP_GRAPHQL_URI: GraphQL endpoint URL
+
+TROUBLESHOOTING
+---------------
+
+Common Issues:
+1. "No refresh token found": 
+   - Check if cookies are being sent with requests
+   - Verify credentials: 'include' in Apollo Client config
+   - Check domain/path cookie settings
+
+2. Token refresh loops:
+   - Ensure only one refresh mechanism is active
+   - Check for race conditions between AuthContext and Apollo Client
+
+3. Logout on page refresh:
+   - Verify GET_CURRENT_USER skip conditions
+   - Check checkAuth() logic for premature token clearing
+
+AUTHENTICATION FLOW DIAGRAM
+----------------------------
+
+```mermaid
+graph TB
+    subgraph "LOGIN/REGISTER FLOW"
+        A1[User Submits Credentials] --> A2[GraphQL login/register Mutation]
+        A2 --> A3[Server Validates Against Neo4j]
+        A3 --> A4{Valid Credentials?}
+        A4 -->|Yes| A5[Generate JWT Tokens]
+        A4 -->|No| A6[Return Error]
+        A5 --> A7[Set Refresh Token in HTTP-only Cookie]
+        A7 --> A8[Return Access Token + User Data]
+        A8 --> A9[Client Stores Access Token in localStorage]
+        A9 --> A10[Update React Auth State]
+        A10 --> A11[User Logged In ✓]
+    end
+
+    subgraph "TOKEN REFRESH FLOW"
+        B1[Access Token Expires/Invalid] --> B2[Apollo Client Detects Auth Error]
+        B2 --> B3[Trigger refreshToken Mutation]
+        B3 --> B4[Send Request with credentials: 'include']
+        B4 --> B5[Server Reads Refresh Token from Cookie]
+        B5 --> B6{Valid Refresh Token?}
+        B6 -->|Yes| B7[Fetch User from Neo4j]
+        B6 -->|No| B8[Return 'No refresh token found']
+        B7 --> B9[Generate New JWT Tokens]
+        B9 --> B10[Set New Refresh Token in Cookie]
+        B10 --> B11[Return New Access Token + User Data]
+        B11 --> B12[Client Updates localStorage]
+        B12 --> B13[Retry Original Request]
+        B13 --> B14[Request Succeeds ✓]
+        B8 --> B15[Clear Auth State & Logout]
+    end
+
+    subgraph "PAGE REFRESH FLOW (FIXED)"
+        C1[Page Loads/Refreshes] --> C2[AuthContext checkAuth Runs]
+        C2 --> C3{Access Token in localStorage?}
+        C3 -->|Yes| C4[Let GET_CURRENT_USER Handle Auth]
+        C3 -->|No| C5{Refresh Token in localStorage?}
+        C4 --> C6[GET_CURRENT_USER Query Triggers]
+        C6 --> C7{Token Valid?}
+        C7 -->|Yes| C8[Fetch User Data Successfully]
+        C7 -->|No| C9[Apollo Error Handling Triggers Refresh]
+        C9 --> B3
+        C8 --> C10[User Stays Logged In ✓]
+        C5 -->|Yes| C11[Attempt refreshToken Mutation]
+        C5 -->|No| C12[Try Cookie-based Refresh]
+        C11 --> C13{Refresh Success?}
+        C12 --> C13
+        C13 -->|Yes| C14[Update Auth State]
+        C13 -->|No| C15[Clear Auth State - Not Logged In]
+        C14 --> C10
+    end
+
+    subgraph "LOGOUT FLOW"
+        D1[User Clicks Logout] --> D2[Clear localStorage Tokens]
+        D2 --> D3[Set 'isLoggedOut' Flag]
+        D3 --> D4[Clear Apollo Cache]
+        D4 --> D5[Server clearCookie for Refresh Token]
+        D5 --> D6[Redirect to Home Page]
+        D6 --> D7[User Logged Out ✓]
+    end
+
+    subgraph "SECURITY LAYERS"
+        E1[HTTP-only Cookies]
+        E2[JWT Token Rotation]
+        E3[SameSite CSRF Protection]
+        E4[Domain Restrictions]
+        E5[15min Access Token Expiry]
+        E6[credentials: 'include' Required]
+    end
+
+    classDef success fill:#90EE90,stroke:#006400,stroke-width:2px
+    classDef error fill:#FFB6C1,stroke:#8B0000,stroke-width:2px
+    classDef security fill:#87CEEB,stroke:#000080,stroke-width:2px
+    classDef process fill:#F0E68C,stroke:#B8860B,stroke-width:2px
+    classDef decision fill:#DDA0DD,stroke:#4B0082,stroke-width:2px
+
+    class A11,B14,C10,D7 success
+    class A6,B8,B15,C15 error
+    class E1,E2,E3,E4,E5,E6 security
+    class A5,A7,A9,B7,B9,B11,C11,C12,D2,D4 process
+    class A4,B6,C3,C5,C7,C13 decision
+```
+
+FLOW EXPLANATIONS:
+
+1. **LOGIN/REGISTER FLOW**: Standard authentication with credential validation, token generation, and secure cookie storage.
+
+2. **TOKEN REFRESH FLOW**: Automatic token renewal when access tokens expire, using HTTP-only cookies for security.
+
+3. **PAGE REFRESH FLOW**: Fixed implementation that eliminates race conditions between AuthContext and Apollo Client, ensuring users stay logged in during page refreshes.
+
+4. **LOGOUT FLOW**: Complete cleanup of client-side and server-side authentication data.
+
+5. **SECURITY LAYERS**: Multiple security measures protecting the authentication system from common vulnerabilities.
+
+This system provides robust, secure authentication while maintaining excellent user experience across page refreshes and long sessions. 
